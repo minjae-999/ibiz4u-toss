@@ -16,20 +16,41 @@ export default function Home() {
   };
 
   const handlePurchase = async () => {
-    setIsLoading(true);
+  setIsLoading(true);
 
-    // 더미 데이터 생성
-    const dummyOrder = {
-      orderId: `ORDER-${Date.now()}`,
-      amount: product.price,
-      trackingNumber: `TRACK-${Date.now()}`,
-      deliveryStatus: 'collected',
+  try {
+    // 1️⃣ 주문 생성 API 호출
+    const orderResponse = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        productName: product.name,
+        amount: product.price,
+      }),
+    });
+
+    const order = await orderResponse.json();
+    console.log('주문 생성:', order);
+
+    // 2️⃣ 배송 정보 조회 API 호출 (trackingNumber 생성)
+    const deliveryResponse = await fetch(
+      `/api/delivery?trackingNumber=${order.orderId}`
+    );
+
+    const deliveryInfo = await deliveryResponse.json();
+    console.log('배송 정보:', deliveryInfo);
+
+    // 3️⃣ 주문 + 배송 정보 합치기
+    const completeOrder = {
+      ...order,
+      trackingNumber: deliveryInfo.trackingNumber,
+      deliveryStatus: deliveryInfo.status,
     };
 
-    setOrderData(dummyOrder);
+    setOrderData(completeOrder);
     setOrderStatus('payment');
 
-    // 토스 SDK 로드
+    // 4️⃣ 토스 결제 UI 띄우기
     const script = document.createElement('script');
     script.src = 'https://js.tosspayments.com/v1';
     script.async = true;
@@ -42,7 +63,7 @@ export default function Home() {
 
         tossPayments.requestPayment('카드', {
           amount: product.price,
-          orderId: dummyOrder.orderId,
+          orderId: order.orderId,
           orderName: product.name,
           customerEmail: 'customer@example.com',
           customerName: '고객명',
@@ -68,7 +89,12 @@ export default function Home() {
     };
 
     document.head.appendChild(script);
-  };
+  } catch (error) {
+    console.error('구매 오류:', error);
+    alert('구매 처리 중 오류가 발생했습니다');
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
