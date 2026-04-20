@@ -66,7 +66,7 @@ export default function Home() {
             orderName: product.name,
             customerEmail: 'customer@example.com',
             customerName: '고객명',
-            successUrl: `${window.location.origin}/api/payments/success?paymentKey={paymentKey}&orderId=${order.orderId}&amount=${product.price}`,
+            successUrl: `${window.location.origin}/?orderId=${order.orderId}&amount=${product.price}&status=success`,
             failUrl: `${window.location.origin}/?success=false`,
           });
 
