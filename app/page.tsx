@@ -16,85 +16,84 @@ export default function Home() {
   };
 
   const handlePurchase = async () => {
-  setIsLoading(true);
+    setIsLoading(true);
 
-  try {
-    // 1️⃣ 주문 생성 API 호출
-    const orderResponse = await fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        productName: product.name,
-        amount: product.price,
-      }),
-    });
-
-    const order = await orderResponse.json();
-    console.log('주문 생성:', order);
-
-    // 2️⃣ 배송 정보 조회 API 호출 (trackingNumber 생성)
-    const deliveryResponse = await fetch(
-      `/api/delivery?trackingNumber=${order.orderId}`
-    );
-
-    const deliveryInfo = await deliveryResponse.json();
-    console.log('배송 정보:', deliveryInfo);
-
-    // 3️⃣ 주문 + 배송 정보 합치기
-    const completeOrder = {
-      ...order,
-      trackingNumber: deliveryInfo.trackingNumber,
-      deliveryStatus: deliveryInfo.status,
-    };
-
-    setOrderData(completeOrder);
-    setOrderStatus('payment');
-
-    // 4️⃣ 토스 결제 UI 띄우기
-    const script = document.createElement('script');
-    script.src = 'https://js.tosspayments.com/v1';
-    script.async = true;
-    script.onload = () => {
-      try {
-        // @ts-ignore
-        const tossPayments = window.TossPayments(
-          process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY
-        );
-
-        tossPayments.requestPayment('카드', {
+    try {
+      // 1️⃣ 주문 생성 API 호출
+      const orderResponse = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productName: product.name,
           amount: product.price,
-          orderId: order.orderId,
-          orderName: product.name,
-          customerEmail: 'customer@example.com',
-          customerName: '고객명',
-          successUrl: `${window.location.origin}/?success=true`,
-          failUrl: `${window.location.origin}/?success=false`,
-        });
+        }),
+      });
 
-        // 2초 후 배송 화면으로 이동
-        setTimeout(() => {
-          setOrderStatus('delivery');
+      const order = await orderResponse.json();
+      console.log('주문 생성:', order);
+
+      // 2️⃣ 배송 정보 조회 API 호출
+      const deliveryResponse = await fetch(
+        `/api/delivery?trackingNumber=${order.orderId}`
+      );
+
+      const deliveryInfo = await deliveryResponse.json();
+      console.log('배송 정보:', deliveryInfo);
+
+      // 3️⃣ 주문 + 배송 정보 합치기
+      const completeOrder = {
+        ...order,
+        ...deliveryInfo,  // ← 배송 정보 전체 포함 (history 포함!)
+      };
+
+      setOrderData(completeOrder);
+      setOrderStatus('payment');
+
+      // 4️⃣ 토스 결제 UI 띄우기
+      const script = document.createElement('script');
+      script.src = 'https://js.tosspayments.com/v1';
+      script.async = true;
+      script.onload = () => {
+        try {
+          // @ts-ignore
+          const tossPayments = window.TossPayments(
+            process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY
+          );
+
+          tossPayments.requestPayment('카드', {
+            amount: product.price,
+            orderId: order.orderId,
+            orderName: product.name,
+            customerEmail: 'customer@example.com',
+            customerName: '고객명',
+            successUrl: `${window.location.origin}/?success=true`,
+            failUrl: `${window.location.origin}/?success=false`,
+          });
+
+          // 2초 후 배송 화면으로 이동
+          setTimeout(() => {
+            setOrderStatus('delivery');
+            setIsLoading(false);
+          }, 2000);
+        } catch (error) {
+          console.error('토스 결제 오류:', error);
+          alert('결제 처리 중 오류가 발생했습니다');
           setIsLoading(false);
-        }, 2000);
-      } catch (error) {
-        console.error('토스 결제 오류:', error);
-        alert('결제 처리 중 오류가 발생했습니다');
+        }
+      };
+
+      script.onerror = () => {
+        alert('토스 SDK 로딩 실패');
         setIsLoading(false);
-      }
-    };
+      };
 
-    script.onerror = () => {
-      alert('토스 SDK 로딩 실패');
+      document.head.appendChild(script);
+    } catch (error) {
+      console.error('구매 오류:', error);
+      alert('구매 처리 중 오류가 발생했습니다');
       setIsLoading(false);
-    };
-
-    document.head.appendChild(script);
-  } catch (error) {
-    console.error('구매 오류:', error);
-    alert('구매 처리 중 오류가 발생했습니다');
-    setIsLoading(false);
-  }
-};
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -169,21 +168,48 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="border-t pt-6">
+            {/* 배송 상태 */}
+            <div className="border-t pt-6 mb-6">
               <h3 className="font-semibold text-gray-900 mb-4">배송 상태</h3>
               <div className="bg-blue-50 p-6 rounded-lg">
                 <p className="text-sm text-gray-600 mb-2">추적번호</p>
                 <p className="font-mono mb-4">{orderData.trackingNumber}</p>
                 <div className="flex items-center space-x-2">
                   <div className="text-xl">📦</div>
-                  <span className="font-semibold text-gray-900">배송 준비 중</span>
+                  <span className="font-semibold text-gray-900">
+                    {orderData.status === 'collected' && '배송 준비 중'}
+                    {orderData.status === 'on_the_way' && '배송 중'}
+                    {orderData.status === 'delivered' && '배송 완료'}
+                  </span>
                 </div>
               </div>
             </div>
 
+            {/* 배송 이력 ← 새로 추가! */}
+            {orderData.history && orderData.history.length > 0 && (
+              <div className="border-t pt-6 mb-6">
+                <h3 className="font-semibold text-gray-900 mb-4">배송 이력</h3>
+                <div className="space-y-4">
+                  {orderData.history.map((item: any, index: number) => (
+                    <div key={index} className="flex items-start space-x-4 pb-4 border-b last:border-b-0">
+                      <div className="text-xl flex-shrink-0">✓</div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{item.status}</p>
+                        <p className="text-sm text-gray-600">{item.location}</p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(item.time).toLocaleString('ko-KR')}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 처음으로 버튼 */}
             <button
               onClick={() => window.location.reload()}
-              className="w-full mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-200"
             >
               처음으로
             </button>
@@ -193,4 +219,3 @@ export default function Home() {
     </div>
   );
 }
-// test
